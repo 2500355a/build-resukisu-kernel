@@ -6,7 +6,7 @@ on:
       KERNEL_BRANCH:
         description: 'AOSP 内核分支'
         required: true
-        default: 'common-android13-5.15'
+        default: 'android13-5.15'
       SUSFS_VERSION:
         description: 'SUSFS 版本 (留空则不集成)'
         required: false
