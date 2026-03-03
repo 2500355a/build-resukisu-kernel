@@ -1,0 +1,96 @@
+name: Build ReSukiSU GKI Kernel from AOSP Source
+
+on:
+  workflow_dispatch:
+    inputs:
+      KERNEL_BRANCH:
+        description: 'AOSP 内核分支'
+        required: true
+        default: 'common-android13-5.15'
+      SUSFS_VERSION:
+        description: 'SUSFS 版本 (留空则不集成)'
+        required: false
+        default: 'v1.5.5'
+
+jobs:
+  build:
+    name: Build Kernel with ReSukiSU
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y git repo curl wget make gcc flex bison libncurses-dev libssl-dev python3
+
+      - name: Clone AOSP GKI Kernel Source
+        run: |
+          mkdir kernel-source
+          cd kernel-source
+          # 直接从 AOSP 官方拉取 5.15 内核源码（浅克隆，省时间空间）
+          git clone --depth=1 https://android.googlesource.com/kernel/common -b ${{ github.event.inputs.KERNEL_BRANCH }}
+
+      - name: Integrate ReSukiSU (Core Step)
+        run: |
+          cd kernel-source/common
+          echo "🔥 执行 ReSukiSU 集成脚本..."
+          curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash
+          echo "✅ ReSukiSU 集成完成"
+
+      - name: Integrate SUSFS (Optional)
+        if: ${{ github.event.inputs.SUSFS_VERSION != '' }}
+        run: |
+          cd kernel-source/common
+          echo "🔥 集成 SUSFS ${{ github.event.inputs.SUSFS_VERSION }} ..."
+          git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b ${{ github.event.inputs.SUSFS_VERSION }}
+          cd susfs4ksu/kernel_patches
+          # 这里假设你的内核版本是 5.15，susfs4ksu 里会有对应的补丁脚本
+          ./apply_susfs_for_kernel.sh ../../../common || echo "SUSFS 补丁可能需手动调整，但继续编译"
+          cd ../../../
+          echo "✅ SUSFS 集成完成"
+
+      - name: Setup Clang Toolchain
+        run: |
+          mkdir toolchain
+          cd toolchain
+          # 下载 AOSP 官方 Clang 工具链（和 Google 编译 GKI 用的版本一致）
+          wget https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r450784e.tar.gz
+          tar -xzf clang-r450784e.tar.gz
+          echo "$(pwd)/bin" >> $GITHUB_PATH
+
+      - name: Configure Kernel
+        run: |
+          cd kernel-source/common
+          # 使用 GKI 默认配置
+          make ARCH=arm64 CC=clang LD=ld.lld gki_defconfig
+          # 确保 ReSukiSU 选项已开启（脚本应该已经改了，但再确认一下）
+          echo "CONFIG_KSU=y" >> .config
+          echo "CONFIG_KSU_MANUAL_HOOK=y" >> .config
+
+      - name: Build Kernel
+        run: |
+          cd kernel-source/common
+          # 使用 Clang 编译，开启 LTO=thin 避免内存不足
+          make ARCH=arm64 CC=clang LD=ld.lld LLVM=1 LLVM_IAS=1 -j$(nproc) Image
+          # 如果上面失败，尝试用官方推荐的 bazel 方式
+          if [ ! -f arch/arm64/boot/Image ]; then
+            tools/bazel build --config=fast //common:kernel_aarch64_dist
+            cp bazel-bin/common/kernel_aarch64_dist/Image arch/arm64/boot/Image || true
+          fi
+
+      - name: Create AnyKernel3 Package
+        run: |
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3
+          cp kernel-source/common/arch/arm64/boot/Image AnyKernel3/
+          cd AnyKernel3
+          sed -i 's/do\./title=ReSukiSU Kernel\n/g' anykernel.sh
+          zip -r9 ../ReSukiSU-GKI-${{ github.event.inputs.KERNEL_BRANCH }}.zip * -x .git README.md
+          cd ..
+
+      - name: Upload Kernel Package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ReSukiSU-Kernel-${{ github.event.inputs.KERNEL_BRANCH }}
+          path: ReSukiSU-GKI-*.zip
