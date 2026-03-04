@@ -1,95 +1,69 @@
-name: Prepare Kernel Source with ReSukiSU and SUSFS
+name: Build ReSukiSU Kernel
 
 on:
   workflow_dispatch:
     inputs:
       KERNEL_BRANCH:
-        description: 'AOSP 内核分支'
+        description: '内核分支'
         required: true
         default: 'android13-5.15'
 
 jobs:
-  prepare:
-    name: Prepare Kernel Source
+  build:
     runs-on: ubuntu-22.04
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
+      
       - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install -y git curl wget
-
-      - name: Clone AOSP GKI Kernel Source
+          sudo apt install -y git wget curl make gcc flex bison \
+            libncurses-dev libssl-dev python3 libelf-dev bc cpio \
+            kmod liblz4-tool libzstd-dev zlib1g-dev \
+            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu lld llvm clang
+      
+      - name: Clone kernel source
         run: |
-          mkdir kernel-source
-          cd kernel-source
           git clone --depth=1 https://android.googlesource.com/kernel/common -b ${{ github.event.inputs.KERNEL_BRANCH }}
-
-      - name: Integrate ReSukiSU
+          cd common
+          
+      - name: Apply ReSukiSU
         run: |
-          cd kernel-source/common
+          cd common
           curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash
-
-      - name: Apply WildKernels SUSFS Patches
+          
+      - name: Apply SUSFS patches
         continue-on-error: true
         run: |
-          cd kernel-source/common
+          cd common
           git clone --depth=1 https://github.com/WildKernels/kernel_patches.git
-          cp kernel_patches/wild/susfs_fix_patches/v2.0.0/a13-5.15/*.patch ./
-          patch -p1 < namespace.c.patch || true
-          patch -p1 < fdinfo.c.patch || true
-          patch -p1 < open.c.patch || true
-          sed -i 's|is_i_uid_not_allowed(i_uid_into_mnt(i_user_ns(inode), inode).val)))|is_i_uid_not_allowed(inode->i_uid.val)))|g' fs/susfs.c || true
-          sed -i -e 's/goto show_pad;/return 0;/' ./fs/proc/task_mmu.c || true
-
-      - name: Apply bcmp fix for Termux
+          cp kernel_patches/wild/susfs_fix_patches/v2.0.0/50_add_susfs_in_gki-android13-5.15.patch ./
+          patch -p1 < 50_add_susfs_in_gki-android13-5.15.patch
+          
+      - name: Configure kernel
         run: |
-          cd kernel-source/common
-          cat >> scripts/kconfig/confdata.c << 'EOF'
-#ifndef __has_builtin
-#define __has_builtin(x) 0
-#endif
-#if !__has_builtin(bcmp)
-#define bcmp(a, b, n) memcmp(a, b, n)
-#endif
-EOF
-
-      - name: Generate defconfig fragment
+          cd common
+          make ARCH=arm64 CC=clang LD=ld.lld gki_defconfig
+          echo "CONFIG_KSU=y" >> .config
+          echo "CONFIG_OVERLAY_FS=y" >> .config
+          echo "CONFIG_KSU_SUSFS=y" >> .config
+          make ARCH=arm64 CC=clang LD=ld.lld olddefconfig
+          
+      - name: Build kernel
         run: |
-          cd kernel-source/common
-          cat > wild_gki.fragment << 'EOF'
-CONFIG_KSU=y
-CONFIG_KSU_MANUAL_HOOK=y
-CONFIG_OVERLAY_FS=y
-CONFIG_OVERLAY_FS_REDIRECT_DIR=y
-CONFIG_OVERLAY_FS_INDEX=y
-CONFIG_OVERLAY_FS_XATTR=y
-CONFIG_OVERLAY_FS_METACOPY=y
-CONFIG_EXT4_FS=y
-CONFIG_EXT4_FS_POSIX_ACL=y
-CONFIG_EXT4_FS_SECURITY=y
-CONFIG_SECURITY_SELINUX=y
-CONFIG_SECURITY_SELINUX_DEVELOP=y
-CONFIG_KSU_SUSFS=y
-CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
-CONFIG_KSU_SUSFS_SUS_PATH=y
-CONFIG_KSU_SUSFS_SUS_MOUNT=y
-CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
-CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
-CONFIG_KSU_SUSFS_SUS_KSTAT=y
-CONFIG_KSU_SUSFS_TRY_UMOUNT=y
-CONFIG_KSU_SUSFS_SPOOF_UNAME=y
-CONFIG_KSU_SUSFS_ENABLE_LOG=y
-CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
-CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
-CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
-EOF
-
-      - name: Upload prepared kernel source
+          cd common
+          make ARCH=arm64 CC=clang LD=ld.lld LLVM=1 LLVM_IAS=1 -j$(nproc) Image
+          
+      - name: Create AnyKernel3 package
+        run: |
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3
+          cp common/arch/arm64/boot/Image AnyKernel3/
+          cd AnyKernel3
+          sed -i 's/do\./title=ReSukiSU Kernel\n/g' anykernel.sh
+          zip -r9 ../kernel.zip *
+          
+      - name: Upload kernel
         uses: actions/upload-artifact@v4
         with:
-          name: kernel-source-prepared-${{ github.run_id }}
-          path: kernel-source/
-          compression-level: 9
+          name: ReSukiSU-Kernel
+          path: kernel.zip
