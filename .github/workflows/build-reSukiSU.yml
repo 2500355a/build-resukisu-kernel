@@ -53,11 +53,21 @@ jobs:
           git clone --depth=1 https://github.com/WildKernels/kernel_patches.git
           cp kernel_patches/wild/susfs_fix_patches/v2.0.0/a13-5.15/*.patch ./
           
+          echo "▶️ 应用 namespace.c.patch ..."
           patch -p1 < namespace.c.patch || echo "namespace.c.patch 应用失败"
+          
+          echo "▶️ 应用 fdinfo.c.patch ..."
           patch -p1 < fdinfo.c.patch || echo "fdinfo.c.patch 应用失败"
+          
+          echo "▶️ 应用 open.c.patch ..."
           patch -p1 < open.c.patch || echo "open.c.patch 应用失败"
           
+          # 3. 手动修改 fs/susfs.c
+          echo "▶️ 修改 fs/susfs.c ..."
           sed -i 's|is_i_uid_not_allowed(i_uid_into_mnt(i_user_ns(inode), inode).val)))|is_i_uid_not_allowed(inode->i_uid.val)))|g' fs/susfs.c || echo "susfs.c 修改失败"
+          
+          # 4. 修改 task_mmu.c
+          echo "▶️ 修改 fs/proc/task_mmu.c ..."
           sed -i -e 's/goto show_pad;/return 0;/' ./fs/proc/task_mmu.c || echo "task_mmu.c 修改失败"
           
           cd ../..
@@ -78,22 +88,27 @@ jobs:
           cd kernel-source/common
           make ARCH=arm64 CC=clang LD=ld.lld gki_defconfig
           
+          # KernelSU 基础
           echo "CONFIG_KSU=y" >> .config
           echo "CONFIG_KSU_MANUAL_HOOK=y" >> .config
           
+          # 🔥 OverlayFS 全开
           echo "CONFIG_OVERLAY_FS=y" >> .config
           echo "CONFIG_OVERLAY_FS_REDIRECT_DIR=y" >> .config
           echo "CONFIG_OVERLAY_FS_INDEX=y" >> .config
           echo "CONFIG_OVERLAY_FS_XATTR=y" >> .config
           echo "CONFIG_OVERLAY_FS_METACOPY=y" >> .config
           
+          # 文件系统权限相关
           echo "CONFIG_EXT4_FS=y" >> .config
           echo "CONFIG_EXT4_FS_POSIX_ACL=y" >> .config
           echo "CONFIG_EXT4_FS_SECURITY=y" >> .config
           
+          # SELinux 支持
           echo "CONFIG_SECURITY_SELINUX=y" >> .config
           echo "CONFIG_SECURITY_SELINUX_DEVELOP=y" >> .config
           
+          # SUSFS 配置选项
           echo "CONFIG_KSU_SUSFS=y" >> .config
           echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> .config
           echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> .config
@@ -110,7 +125,7 @@ jobs:
           
           echo "✅ 内核配置完成"
 
-      - name: Build Kernel (Ignore exit code, check Image)
+      - name: Build Kernel (Find Image)
         run: |
           cd kernel-source/common
           echo "🔥 开始编译内核..."
@@ -118,20 +133,23 @@ jobs:
           # 编译内核，忽略退出码
           make ARCH=arm64 CC=clang LD=ld.lld LLVM=1 LLVM_IAS=1 -j$(nproc) Image || true
           
-          # 手动检查Image是否存在
+          # 查找 Image 文件
+          echo "🔍 正在查找 Image 文件..."
+          find . -name "Image" -type f 2>/dev/null | head -20
+          
+          # 尝试常见位置
           if [ -f arch/arm64/boot/Image ]; then
-            echo "✅ 内核编译成功，Image已生成"
+            echo "✅ 在 arch/arm64/boot/Image 找到"
             ls -lh arch/arm64/boot/Image
+            exit 0
+          elif [ -f arch/arm64/boot/Image.gz ]; then
+            echo "✅ 找到 Image.gz，正在解压..."
+            gunzip -c arch/arm64/boot/Image.gz > arch/arm64/boot/Image
+            ls -lh arch/arm64/boot/Image
+            exit 0
           else
-            echo "⚠️ make未生成Image，尝试bazel编译..."
-            tools/bazel build --config=fast //common:kernel_aarch64_dist || true
-            if [ -f bazel-bin/common/kernel_aarch64_dist/Image ]; then
-              cp bazel-bin/common/kernel_aarch64_dist/Image arch/arm64/boot/Image
-              echo "✅ bazel编译成功"
-            else
-              echo "❌ 内核编译失败：Image未生成"
-              exit 1
-            fi
+            echo "❌ 未找到 Image 文件"
+            exit 1
           fi
 
       - name: Create AnyKernel3 Package
