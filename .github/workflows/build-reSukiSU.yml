@@ -36,13 +36,26 @@ jobs:
         continue-on-error: true
         run: |
           cd kernel-source/common
+          # 🔥 这里改动了：用 WildKernels 的补丁，不是版本号
           git clone --depth=1 https://github.com/WildKernels/kernel_patches.git
           cp kernel_patches/wild/susfs_fix_patches/v2.0.0/a13-5.15/*.patch ./
-          patch -p1 < namespace.c.patch || true
-          patch -p1 < fdinfo.c.patch || true
-          patch -p1 < open.c.patch || true
-          sed -i 's|is_i_uid_not_allowed(i_uid_into_mnt(i_user_ns(inode), inode).val)))|is_i_uid_not_allowed(inode->i_uid.val)))|g' fs/susfs.c || true
-          sed -i -e 's/goto show_pad;/return 0;/' ./fs/proc/task_mmu.c || true
+          
+          echo "▶️ 应用 namespace.c.patch ..."
+          patch -p1 < namespace.c.patch || echo "namespace.c.patch 应用失败"
+          
+          echo "▶️ 应用 fdinfo.c.patch ..."
+          patch -p1 < fdinfo.c.patch || echo "fdinfo.c.patch 应用失败"
+          
+          echo "▶️ 应用 open.c.patch ..."
+          patch -p1 < open.c.patch || echo "open.c.patch 应用失败"
+          
+          # 3. 手动修改 fs/susfs.c
+          echo "▶️ 修改 fs/susfs.c ..."
+          sed -i 's|is_i_uid_not_allowed(i_uid_into_mnt(i_user_ns(inode), inode).val)))|is_i_uid_not_allowed(inode->i_uid.val)))|g' fs/susfs.c || echo "susfs.c 修改失败"
+          
+          # 4. 修改 task_mmu.c
+          echo "▶️ 修改 fs/proc/task_mmu.c ..."
+          sed -i -e 's/goto show_pad;/return 0;/' ./fs/proc/task_mmu.c || echo "task_mmu.c 修改失败"
 
       - name: Generate defconfig fragment
         run: |
