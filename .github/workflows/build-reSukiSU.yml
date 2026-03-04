@@ -71,33 +71,32 @@ jobs:
           cd common
           make ARCH=arm64 CC=clang LD=ld.lld gki_defconfig
           
-          cat >> .config << 'EOF'
-CONFIG_KSU=y
-CONFIG_KSU_MANUAL_HOOK=y
-CONFIG_OVERLAY_FS=y
-CONFIG_OVERLAY_FS_REDIRECT_DIR=y
-CONFIG_OVERLAY_FS_INDEX=y
-CONFIG_OVERLAY_FS_XATTR=y
-CONFIG_OVERLAY_FS_METACOPY=y
-CONFIG_EXT4_FS=y
-CONFIG_EXT4_FS_POSIX_ACL=y
-CONFIG_EXT4_FS_SECURITY=y
-CONFIG_SECURITY_SELINUX=y
-CONFIG_SECURITY_SELINUX_DEVELOP=y
-CONFIG_KSU_SUSFS=y
-CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
-CONFIG_KSU_SUSFS_SUS_PATH=y
-CONFIG_KSU_SUSFS_SUS_MOUNT=y
-CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
-CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
-CONFIG_KSU_SUSFS_SUS_KSTAT=y
-CONFIG_KSU_SUSFS_TRY_UMOUNT=y
-CONFIG_KSU_SUSFS_SPOOF_UNAME=y
-CONFIG_KSU_SUSFS_ENABLE_LOG=y
-CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
-CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
-CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
-EOF
+          # 添加内核配置
+          echo "CONFIG_KSU=y" >> .config
+          echo "CONFIG_KSU_MANUAL_HOOK=y" >> .config
+          echo "CONFIG_OVERLAY_FS=y" >> .config
+          echo "CONFIG_OVERLAY_FS_REDIRECT_DIR=y" >> .config
+          echo "CONFIG_OVERLAY_FS_INDEX=y" >> .config
+          echo "CONFIG_OVERLAY_FS_XATTR=y" >> .config
+          echo "CONFIG_OVERLAY_FS_METACOPY=y" >> .config
+          echo "CONFIG_EXT4_FS=y" >> .config
+          echo "CONFIG_EXT4_FS_POSIX_ACL=y" >> .config
+          echo "CONFIG_EXT4_FS_SECURITY=y" >> .config
+          echo "CONFIG_SECURITY_SELINUX=y" >> .config
+          echo "CONFIG_SECURITY_SELINUX_DEVELOP=y" >> .config
+          echo "CONFIG_KSU_SUSFS=y" >> .config
+          echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> .config
+          echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> .config
+          echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> .config
+          echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y" >> .config
+          echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y" >> .config
+          echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> .config
+          echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y" >> .config
+          echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" >> .config
+          echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y" >> .config
+          echo "CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y" >> .config
+          echo "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y" >> .config
+          echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> .config
           
           make ARCH=arm64 CC=clang LD=ld.lld olddefconfig
           
