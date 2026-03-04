@@ -14,13 +14,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Install dependencies
+      - name: Install dependencies (Full toolchain)
         run: |
           sudo apt update
-          sudo apt install -y git wget curl make gcc flex bison \
-            libncurses-dev libssl-dev python3 libelf-dev bc cpio \
-            kmod liblz4-tool libzstd-dev zlib1g-dev \
-            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu lld llvm clang
+          sudo apt install -y \
+            git wget curl \
+            make gcc flex bison \
+            libncurses-dev libssl-dev \
+            python3 libelf-dev \
+            bc cpio kmod \
+            liblz4-tool libzstd-dev \
+            zlib1g-dev \
+            gcc-aarch64-linux-gnu \
+            binutils-aarch64-linux-gnu \
+            gcc-arm-linux-gnueabi \
+            lld llvm clang \
+            dwarves \
+            rsync \
+            tar \
+            xz-utils \
+            bzip2 \
+            lzop \
+            u-boot-tools \
+            device-tree-compiler
       
       - name: Clone kernel source
         run: |
@@ -32,18 +48,77 @@ jobs:
           cd common
           curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash
           
+      - name: Apply SUSFS patches (WildKernels)
+        continue-on-error: true
+        run: |
+          cd common
+          git clone --depth=1 https://github.com/WildKernels/kernel_patches.git
+          SUBLEVEL=$(grep "^SUBLEVEL =" Makefile | awk '{print $3}')
+          echo "SUBLEVEL=$SUBLEVEL"
+          
+          cp -r kernel_patches/wild/susfs_fix_patches/v2.0.0/fs/* ./fs/ 2>/dev/null || true
+          cp -r kernel_patches/wild/susfs_fix_patches/v2.0.0/include/linux/* ./include/linux/ 2>/dev/null || true
+          
+          if [ "$SUBLEVEL" -le 41 ]; then
+            cp kernel_patches/wild/susfs_fix_patches/v2.0.0/a13-5.15/*.patch ./
+            patch -p1 < namespace.c.patch || true
+            patch -p1 < fdinfo.c.patch || true
+            patch -p1 < open.c.patch || true
+            sed -i 's|is_i_uid_not_allowed(i_uid_into_mnt(i_user_ns(inode), inode).val)))|is_i_uid_not_allowed(inode->i_uid.val)))|g' fs/susfs.c || true
+          fi
+          
+          if [ "$SUBLEVEL" -le 148 ]; then
+            sed -i -e 's/goto show_pad;/return 0;/' ./fs/proc/task_mmu.c || true
+          fi
+          
+          rm -rf kernel_patches
+          
       - name: Configure kernel
         run: |
           cd common
           make ARCH=arm64 CC=clang LD=ld.lld gki_defconfig
-          echo "CONFIG_KSU=y" >> .config
-          echo "CONFIG_OVERLAY_FS=y" >> .config
+          
+          cat >> .config << 'EOF'
+CONFIG_KSU=y
+CONFIG_KSU_MANUAL_HOOK=y
+CONFIG_OVERLAY_FS=y
+CONFIG_OVERLAY_FS_REDIRECT_DIR=y
+CONFIG_OVERLAY_FS_INDEX=y
+CONFIG_OVERLAY_FS_XATTR=y
+CONFIG_OVERLAY_FS_METACOPY=y
+CONFIG_EXT4_FS=y
+CONFIG_EXT4_FS_POSIX_ACL=y
+CONFIG_EXT4_FS_SECURITY=y
+CONFIG_SECURITY_SELINUX=y
+CONFIG_SECURITY_SELINUX_DEVELOP=y
+CONFIG_KSU_SUSFS=y
+CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
+CONFIG_KSU_SUSFS_SUS_PATH=y
+CONFIG_KSU_SUSFS_SUS_MOUNT=y
+CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
+CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
+CONFIG_KSU_SUSFS_SUS_KSTAT=y
+CONFIG_KSU_SUSFS_TRY_UMOUNT=y
+CONFIG_KSU_SUSFS_SPOOF_UNAME=y
+CONFIG_KSU_SUSFS_ENABLE_LOG=y
+CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
+CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
+CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
+EOF
+          
           make ARCH=arm64 CC=clang LD=ld.lld olddefconfig
           
       - name: Build kernel
         run: |
           cd common
-          make ARCH=arm64 CC=clang LD=ld.lld LLVM=1 LLVM_IAS=1 -j$(nproc) Image
+          export ARCH=arm64
+          export CROSS_COMPILE=aarch64-linux-gnu-
+          export CC=clang
+          export LD=ld.lld
+          export LLVM=1
+          export LLVM_IAS=1
+          
+          make -j$(nproc) Image
           
       - name: Create AnyKernel3 package
         run: |
