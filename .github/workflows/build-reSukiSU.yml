@@ -14,7 +14,17 @@ jobs:
             libncurses-dev libssl-dev python3 libelf-dev bc cpio \
             kmod liblz4-tool libzstd-dev zlib1g-dev \
             gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
-            lld llvm clang dwarves
+            lld llvm clang cmake
+          
+          # 编译安装最新版 pahole
+          git clone https://git.kernel.org/pub/scm/devel/pahole/pahole.git
+          cd pahole
+          mkdir build && cd build
+          cmake -D__LIB=lib ..
+          make
+          sudo make install
+          cd ../..
+          pahole --version
       
       - name: Clone Xiaomi 13 kernel source
         run: |
@@ -33,7 +43,7 @@ jobs:
           echo '    bool "HWID support"' >> drivers/misc/hwid/Kconfig
           echo '    default y' >> drivers/misc/hwid/Kconfig
           
-      - name: Find and use correct defconfig
+      - name: Find and configure kernel
         run: |
           cd Xiaomi_Kernel_OpenSource
           export ARCH=arm64
@@ -41,19 +51,8 @@ jobs:
           export CC=clang
           export LD=ld.lld
           
-          echo "Searching for fuxi_defconfig..."
-          CONFIG_PATH=$(find . -name "fuxi_defconfig" -type f | head -1)
-          
-          if [ -n "$CONFIG_PATH" ]; then
-            echo "Found config at: $CONFIG_PATH"
-            # 提取相对路径作为make目标
-            CONFIG_TARGET=$(echo "$CONFIG_PATH" | sed 's|^\./||' | sed 's|arch/arm64/configs/||')
-            echo "Using target: $CONFIG_TARGET"
-            make $CONFIG_TARGET
-          else
-            echo "fuxi_defconfig not found, using gki_defconfig"
-            make gki_defconfig
-          fi
+          # 直接使用gki_defconfig
+          make gki_defconfig
           
       - name: Build kernel
         run: |
