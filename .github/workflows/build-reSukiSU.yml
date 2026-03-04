@@ -50,27 +50,14 @@ jobs:
           cd kernel-source/common
           echo "🔥 拉取 WildKernels 的 SUSFS 补丁 ..."
           
-          # 1. 拉取 WildKernels 的 kernel_patches 仓库
           git clone --depth=1 https://github.com/WildKernels/kernel_patches.git
-          
-          # 2. 应用 5.15 内核的三个补丁
           cp kernel_patches/wild/susfs_fix_patches/v2.0.0/a13-5.15/*.patch ./
           
-          echo "▶️ 应用 namespace.c.patch ..."
           patch -p1 < namespace.c.patch || echo "namespace.c.patch 应用失败"
-          
-          echo "▶️ 应用 fdinfo.c.patch ..."
           patch -p1 < fdinfo.c.patch || echo "fdinfo.c.patch 应用失败"
-          
-          echo "▶️ 应用 open.c.patch ..."
           patch -p1 < open.c.patch || echo "open.c.patch 应用失败"
           
-          # 3. 手动修改 fs/susfs.c
-          echo "▶️ 修改 fs/susfs.c ..."
           sed -i 's|is_i_uid_not_allowed(i_uid_into_mnt(i_user_ns(inode), inode).val)))|is_i_uid_not_allowed(inode->i_uid.val)))|g' fs/susfs.c || echo "susfs.c 修改失败"
-          
-          # 4. 修改 task_mmu.c
-          echo "▶️ 修改 fs/proc/task_mmu.c ..."
           sed -i -e 's/goto show_pad;/return 0;/' ./fs/proc/task_mmu.c || echo "task_mmu.c 修改失败"
           
           cd ../..
@@ -80,12 +67,9 @@ jobs:
         run: |
           mkdir toolchain
           cd toolchain
-          
-          # 改用 kernel.org 的预编译 Clang（稳定可靠）
           wget https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.6/clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04.tar.xz
           tar -xf clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04.tar.xz
           mv clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04/* .
-          
           echo "$(pwd)/bin" >> $GITHUB_PATH
           echo "✅ Clang 17.0.6 安装完成"
 
@@ -94,27 +78,22 @@ jobs:
           cd kernel-source/common
           make ARCH=arm64 CC=clang LD=ld.lld gki_defconfig
           
-          # KernelSU 基础
           echo "CONFIG_KSU=y" >> .config
           echo "CONFIG_KSU_MANUAL_HOOK=y" >> .config
           
-          # 🔥 OverlayFS 全开（小米平板6 Pro的配置）
           echo "CONFIG_OVERLAY_FS=y" >> .config
           echo "CONFIG_OVERLAY_FS_REDIRECT_DIR=y" >> .config
           echo "CONFIG_OVERLAY_FS_INDEX=y" >> .config
           echo "CONFIG_OVERLAY_FS_XATTR=y" >> .config
           echo "CONFIG_OVERLAY_FS_METACOPY=y" >> .config
           
-          # 文件系统权限相关（MT管理器直接修改的关键）
           echo "CONFIG_EXT4_FS=y" >> .config
           echo "CONFIG_EXT4_FS_POSIX_ACL=y" >> .config
           echo "CONFIG_EXT4_FS_SECURITY=y" >> .config
           
-          # SELinux 支持（Android必须）
           echo "CONFIG_SECURITY_SELINUX=y" >> .config
           echo "CONFIG_SECURITY_SELINUX_DEVELOP=y" >> .config
           
-          # SUSFS 配置选项（从 WildKernels 来的）
           echo "CONFIG_KSU_SUSFS=y" >> .config
           echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> .config
           echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> .config
@@ -131,41 +110,11 @@ jobs:
           
           echo "✅ 内核配置完成"
 
-      - name: Build Kernel (with full log capture)
+      - name: Build Kernel (No容错)
         run: |
           cd kernel-source/common
           echo "🔥 开始编译内核..."
-          
-          # 创建日志文件
-          BUILD_LOG="${{ github.workspace }}/build-error.log"
-          
-          # 编译内核，把详细输出和错误都打印到屏幕，同时写入日志文件
-          make ARCH=arm64 CC=clang LD=ld.lld LLVM=1 LLVM_IAS=1 -j$(nproc) V=1 Image 2>&1 | tee $BUILD_LOG
-          
-          # 检查编译是否成功（检查退出状态码）
-          if [ ${PIPESTATUS[0]} -ne 0 ]; then
-            echo "❌ 内核编译失败！退出码: ${PIPESTATUS[0]}"
-            echo "最后的50行日志："
-            tail -50 $BUILD_LOG
-            exit ${PIPESTATUS[0]}
-          fi
-          
-          # 检查Image文件是否存在
-          if [ ! -f arch/arm64/boot/Image ]; then
-            echo "❌ Image 文件未生成！"
-            exit 1
-          fi
-          
-          echo "✅ 内核编译成功"
-          ls -lh arch/arm64/boot/Image
-
-      - name: Upload build logs
-        if: always()  # 无论成功失败都上传
-        uses: actions/upload-artifact@v4
-        with:
-          name: kernel-build-logs-${{ github.run_id }}
-          path: build-error.log
-          if-no-files-found: warn
+          make ARCH=arm64 CC=clang LD=ld.lld LLVM=1 LLVM_IAS=1 -j$(nproc) Image
 
       - name: Create AnyKernel3 Package
         run: |
