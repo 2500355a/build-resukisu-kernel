@@ -131,27 +131,41 @@ jobs:
           
           echo "✅ 内核配置完成"
 
-      - name: Build Kernel (with verbose output)
+      - name: Build Kernel (with full log capture)
         run: |
           cd kernel-source/common
-          echo "🔥 开始编译内核（详细模式）..."
-          make ARCH=arm64 CC=clang LD=ld.lld LLVM=1 LLVM_IAS=1 -j$(nproc) V=1 Image
+          echo "🔥 开始编译内核..."
           
-          # 如果上面的失败，尝试 bazel
-          if [ $? -ne 0 ] || [ ! -f arch/arm64/boot/Image ]; then
-            echo "⚠️ make 失败，尝试 bazel 编译..."
-            tools/bazel build --config=fast //common:kernel_aarch64_dist
-            cp bazel-bin/common/kernel_aarch64_dist/Image arch/arm64/boot/Image
+          # 创建日志文件
+          BUILD_LOG="${{ github.workspace }}/build-error.log"
+          
+          # 编译内核，把详细输出和错误都打印到屏幕，同时写入日志文件
+          make ARCH=arm64 CC=clang LD=ld.lld LLVM=1 LLVM_IAS=1 -j$(nproc) V=1 Image 2>&1 | tee $BUILD_LOG
+          
+          # 检查编译是否成功（检查退出状态码）
+          if [ ${PIPESTATUS[0]} -ne 0 ]; then
+            echo "❌ 内核编译失败！退出码: ${PIPESTATUS[0]}"
+            echo "最后的50行日志："
+            tail -50 $BUILD_LOG
+            exit ${PIPESTATUS[0]}
           fi
           
-          # 最终检查
-          if [ -f arch/arm64/boot/Image ]; then
-            echo "✅ 内核编译成功"
-            ls -lh arch/arm64/boot/Image
-          else
-            echo "❌ 内核编译失败"
+          # 检查Image文件是否存在
+          if [ ! -f arch/arm64/boot/Image ]; then
+            echo "❌ Image 文件未生成！"
             exit 1
           fi
+          
+          echo "✅ 内核编译成功"
+          ls -lh arch/arm64/boot/Image
+
+      - name: Upload build logs
+        if: always()  # 无论成功失败都上传
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-build-logs-${{ github.run_id }}
+          path: build-error.log
+          if-no-files-found: warn
 
       - name: Create AnyKernel3 Package
         run: |
