@@ -7,55 +7,43 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
-      - name: Install dependencies
-        run: |
-          sudo apt update
-          sudo apt install -y git wget curl make gcc flex bison \
-            libncurses-dev libssl-dev python3 libelf-dev bc cpio \
-            kmod liblz4-tool libzstd-dev zlib1g-dev \
-            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
-            lld llvm clang \
-            dwarves  # 就用这个，别自己编译
+      - name: Install deps
+        run: sudo apt install -y git wget curl make gcc flex bison \
+          libncurses-dev libssl-dev python3 libelf-dev bc cpio \
+          gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
+          lld llvm clang dwarves
       
-      - name: Clone Xiaomi 13 kernel source
-        run: |
-          git clone --depth=1 https://github.com/MiCode/Xiaomi_Kernel_OpenSource.git -b fuxi-t-oss
+      - name: Clone kernel
+        run: git clone --depth=1 https://github.com/MiCode/Xiaomi_Kernel_OpenSource.git -b fuxi-t-oss
           
       - name: Apply ReSukiSU
         run: |
           cd Xiaomi_Kernel_OpenSource
           curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash
           
-      - name: Fix missing Kconfig
+      - name: Fix hwid
         run: |
           cd Xiaomi_Kernel_OpenSource
           mkdir -p drivers/misc/hwid
           echo 'config HWID' > drivers/misc/hwid/Kconfig
           echo '    bool "HWID support"' >> drivers/misc/hwid/Kconfig
-          echo '    default y' >> drivers/misc/hwid/Kconfig
           
-      - name: Configure kernel
+      - name: Configure
         run: |
           cd Xiaomi_Kernel_OpenSource
-          export ARCH=arm64
-          export CROSS_COMPILE=aarch64-linux-gnu-
-          export CC=clang
-          export LD=ld.lld
+          export ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC=clang LD=ld.lld
           make gki_defconfig
+          echo "CONFIG_DEBUG_INFO_BTF=n" >> .config
+          make olddefconfig
           
-      - name: Build kernel
+      - name: Build
         run: |
           cd Xiaomi_Kernel_OpenSource
-          export ARCH=arm64
-          export CROSS_COMPILE=aarch64-linux-gnu-
-          export CC=clang
-          export LD=ld.lld
-          export LLVM=1
-          export LLVM_IAS=1
+          export ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC=clang LD=ld.lld LLVM=1 LLVM_IAS=1
           make -j$(nproc) Image
           
-      - name: Upload kernel
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: xiaomi13-kernel-${{ github.run_id }}
+          name: kernel
           path: Xiaomi_Kernel_OpenSource/arch/arm64/boot/Image
