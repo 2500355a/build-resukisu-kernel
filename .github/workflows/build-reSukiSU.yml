@@ -32,17 +32,28 @@ jobs:
           echo 'config HWID' > drivers/misc/hwid/Kconfig
           echo '    bool "HWID support"' >> drivers/misc/hwid/Kconfig
           echo '    default y' >> drivers/misc/hwid/Kconfig
-          echo '    help' >> drivers/misc/hwid/Kconfig
-          echo '      Hardware ID support for Xiaomi devices' >> drivers/misc/hwid/Kconfig
           
-      - name: Configure kernel
+      - name: Find and use correct defconfig
         run: |
           cd Xiaomi_Kernel_OpenSource
           export ARCH=arm64
           export CROSS_COMPILE=aarch64-linux-gnu-
           export CC=clang
           export LD=ld.lld
-          make vendor/fuxi_defconfig
+          
+          echo "Searching for fuxi_defconfig..."
+          CONFIG_PATH=$(find . -name "fuxi_defconfig" -type f | head -1)
+          
+          if [ -n "$CONFIG_PATH" ]; then
+            echo "Found config at: $CONFIG_PATH"
+            # 提取相对路径作为make目标
+            CONFIG_TARGET=$(echo "$CONFIG_PATH" | sed 's|^\./||' | sed 's|arch/arm64/configs/||')
+            echo "Using target: $CONFIG_TARGET"
+            make $CONFIG_TARGET
+          else
+            echo "fuxi_defconfig not found, using gki_defconfig"
+            make gki_defconfig
+          fi
           
       - name: Build kernel
         run: |
