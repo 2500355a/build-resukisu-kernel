@@ -16,10 +16,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: Install dependencies (Full)
         run: |
           sudo apt update
-          sudo apt install -y git repo curl wget make gcc flex bison libncurses-dev libssl-dev python3 libelf-dev
+          sudo apt install -y \
+            git repo curl wget \
+            make gcc flex bison \
+            libncurses-dev libssl-dev \
+            python3 libelf-dev \
+            bc cpio kmod \
+            liblz4-tool libzstd-dev \
+            zlib1g-dev \
+            gcc-aarch64-linux-gnu \
+            binutils-aarch64-linux-gnu \
+            lld llvm clang
 
       - name: Clone AOSP GKI Kernel Source
         run: |
@@ -66,7 +76,7 @@ jobs:
           cd ../..
           echo "✅ WildKernels SUSFS 补丁应用完成"
 
-      - name: Setup Clang Toolchain (Fixed)
+      - name: Setup Clang Toolchain
         run: |
           mkdir toolchain
           cd toolchain
@@ -121,13 +131,26 @@ jobs:
           
           echo "✅ 内核配置完成"
 
-      - name: Build Kernel
+      - name: Build Kernel (with verbose output)
         run: |
           cd kernel-source/common
-          make ARCH=arm64 CC=clang LD=ld.lld LLVM=1 LLVM_IAS=1 -j$(nproc) Image
-          if [ ! -f arch/arm64/boot/Image ]; then
+          echo "🔥 开始编译内核（详细模式）..."
+          make ARCH=arm64 CC=clang LD=ld.lld LLVM=1 LLVM_IAS=1 -j$(nproc) V=1 Image
+          
+          # 如果上面的失败，尝试 bazel
+          if [ $? -ne 0 ] || [ ! -f arch/arm64/boot/Image ]; then
+            echo "⚠️ make 失败，尝试 bazel 编译..."
             tools/bazel build --config=fast //common:kernel_aarch64_dist
-            cp bazel-bin/common/kernel_aarch64_dist/Image arch/arm64/boot/Image || true
+            cp bazel-bin/common/kernel_aarch64_dist/Image arch/arm64/boot/Image
+          fi
+          
+          # 最终检查
+          if [ -f arch/arm64/boot/Image ]; then
+            echo "✅ 内核编译成功"
+            ls -lh arch/arm64/boot/Image
+          else
+            echo "❌ 内核编译失败"
+            exit 1
           fi
 
       - name: Create AnyKernel3 Package
