@@ -71,7 +71,6 @@ jobs:
           cd common
           make ARCH=arm64 CC=clang LD=ld.lld gki_defconfig
           
-          # 添加内核配置
           echo "CONFIG_KSU=y" >> .config
           echo "CONFIG_KSU_MANUAL_HOOK=y" >> .config
           echo "CONFIG_OVERLAY_FS=y" >> .config
@@ -100,7 +99,7 @@ jobs:
           
           make ARCH=arm64 CC=clang LD=ld.lld olddefconfig
           
-      - name: Build kernel
+      - name: Build kernel with verbose output
         run: |
           cd common
           export ARCH=arm64
@@ -110,7 +109,8 @@ jobs:
           export LLVM=1
           export LLVM_IAS=1
           
-          make -j$(nproc) Image
+          # 加 V=1 输出详细信息
+          make -j$(nproc) V=1 Image
           
       - name: Create AnyKernel3 package
         run: |
