@@ -25,6 +25,11 @@ jobs:
           make
           sudo make install
           cd ../..
+          
+          # 更新动态库缓存
+          sudo ldconfig
+          
+          # 验证
           pahole --version
       
       - name: Clone Xiaomi 13 kernel source
