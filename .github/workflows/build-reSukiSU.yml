@@ -2,11 +2,6 @@ name: Build Xiaomi 13 Kernel
 
 on:
   workflow_dispatch:
-    inputs:
-      KERNEL_BRANCH:
-        description: '内核分支'
-        required: true
-        default: 'fuxi-t-oss'
 
 jobs:
   build:
@@ -23,12 +18,12 @@ jobs:
       
       - name: Clone Xiaomi 13 kernel source
         run: |
-          git clone --depth=1 https://github.com/MiCode/Xiaomi_Kernel_OpenSource.git -b ${{ github.event.inputs.KERNEL_BRANCH }}
+          git clone --depth=1 https://github.com/MiCode/Xiaomi_Kernel_OpenSource.git -b fuxi-t-oss
           
-      - name: Clone device tree
+      - name: Apply ReSukiSU (optional)
         run: |
-          git clone --depth=1 https://github.com/MiCode/kernel_devicetree.git -b ${{ github.event.inputs.KERNEL_BRANCH }}
-          cp -r kernel_devicetree/* Xiaomi_Kernel_OpenSource/ 2>/dev/null || true
+          cd Xiaomi_Kernel_OpenSource
+          curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash
           
       - name: Configure kernel
         run: |
@@ -38,11 +33,8 @@ jobs:
           export CC=clang
           export LD=ld.lld
           
-          # 创建输出目录
-          mkdir -p out
-          
-          # 尝试gki_defconfig（小米13是GKI设备）
-          make O=out ARCH=arm64 CC=clang LD=ld.lld gki_defconfig
+          # 小米13的配置
+          make vendor/fuxi_defconfig
           
       - name: Build kernel
         run: |
@@ -54,10 +46,10 @@ jobs:
           export LLVM=1
           export LLVM_IAS=1
           
-          make O=out -j$(nproc) Image
+          make -j$(nproc) Image
           
       - name: Upload kernel
         uses: actions/upload-artifact@v4
         with:
           name: xiaomi13-kernel-${{ github.run_id }}
-          path: Xiaomi_Kernel_OpenSource/out/arch/arm64/boot/Image
+          path: Xiaomi_Kernel_OpenSource/arch/arm64/boot/Image
