@@ -1,4 +1,4 @@
-name: Build ReSukiSU GKI Kernel from AOSP Source
+name: Prepare Kernel Source with ReSukiSU and SUSFS
 
 on:
   workflow_dispatch:
@@ -9,27 +9,17 @@ on:
         default: 'android13-5.15'
 
 jobs:
-  build:
-    name: Build Kernel with ReSukiSU
+  prepare:
+    name: Prepare Kernel Source
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install dependencies (Full)
+      - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install -y \
-            git repo curl wget \
-            make gcc flex bison \
-            libncurses-dev libssl-dev \
-            python3 libelf-dev \
-            bc cpio kmod \
-            liblz4-tool libzstd-dev \
-            zlib1g-dev \
-            gcc-aarch64-linux-gnu \
-            binutils-aarch64-linux-gnu \
-            lld llvm clang
+          sudo apt install -y git curl wget
 
       - name: Clone AOSP GKI Kernel Source
         run: |
@@ -37,132 +27,57 @@ jobs:
           cd kernel-source
           git clone --depth=1 https://android.googlesource.com/kernel/common -b ${{ github.event.inputs.KERNEL_BRANCH }}
 
-      - name: Integrate ReSukiSU (Core Step)
+      - name: Integrate ReSukiSU
         run: |
           cd kernel-source/common
-          echo "🔥 执行 ReSukiSU 集成脚本..."
           curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash
-          echo "✅ ReSukiSU 集成完成"
 
-      - name: Apply WildKernels SUSFS Patches (for 5.15)
+      - name: Apply WildKernels SUSFS Patches
         continue-on-error: true
         run: |
           cd kernel-source/common
-          echo "🔥 拉取 WildKernels 的 SUSFS 补丁 ..."
-          
           git clone --depth=1 https://github.com/WildKernels/kernel_patches.git
           cp kernel_patches/wild/susfs_fix_patches/v2.0.0/a13-5.15/*.patch ./
-          
-          echo "▶️ 应用 namespace.c.patch ..."
-          patch -p1 < namespace.c.patch || echo "namespace.c.patch 应用失败"
-          
-          echo "▶️ 应用 fdinfo.c.patch ..."
-          patch -p1 < fdinfo.c.patch || echo "fdinfo.c.patch 应用失败"
-          
-          echo "▶️ 应用 open.c.patch ..."
-          patch -p1 < open.c.patch || echo "open.c.patch 应用失败"
-          
-          # 3. 手动修改 fs/susfs.c
-          echo "▶️ 修改 fs/susfs.c ..."
-          sed -i 's|is_i_uid_not_allowed(i_uid_into_mnt(i_user_ns(inode), inode).val)))|is_i_uid_not_allowed(inode->i_uid.val)))|g' fs/susfs.c || echo "susfs.c 修改失败"
-          
-          # 4. 修改 task_mmu.c
-          echo "▶️ 修改 fs/proc/task_mmu.c ..."
-          sed -i -e 's/goto show_pad;/return 0;/' ./fs/proc/task_mmu.c || echo "task_mmu.c 修改失败"
-          
-          cd ../..
-          echo "✅ WildKernels SUSFS 补丁应用完成"
+          patch -p1 < namespace.c.patch || true
+          patch -p1 < fdinfo.c.patch || true
+          patch -p1 < open.c.patch || true
+          sed -i 's|is_i_uid_not_allowed(i_uid_into_mnt(i_user_ns(inode), inode).val)))|is_i_uid_not_allowed(inode->i_uid.val)))|g' fs/susfs.c || true
+          sed -i -e 's/goto show_pad;/return 0;/' ./fs/proc/task_mmu.c || true
 
-      - name: Setup Clang Toolchain
-        run: |
-          mkdir toolchain
-          cd toolchain
-          wget https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.6/clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04.tar.xz
-          tar -xf clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04.tar.xz
-          mv clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04/* .
-          echo "$(pwd)/bin" >> $GITHUB_PATH
-          echo "✅ Clang 17.0.6 安装完成"
-
-      - name: Configure Kernel 🔥
+      - name: Generate defconfig fragment
         run: |
           cd kernel-source/common
-          make ARCH=arm64 CC=clang LD=ld.lld gki_defconfig
-          
-          # KernelSU 基础
-          echo "CONFIG_KSU=y" >> .config
-          echo "CONFIG_KSU_MANUAL_HOOK=y" >> .config
-          
-          # 🔥 OverlayFS 全开
-          echo "CONFIG_OVERLAY_FS=y" >> .config
-          echo "CONFIG_OVERLAY_FS_REDIRECT_DIR=y" >> .config
-          echo "CONFIG_OVERLAY_FS_INDEX=y" >> .config
-          echo "CONFIG_OVERLAY_FS_XATTR=y" >> .config
-          echo "CONFIG_OVERLAY_FS_METACOPY=y" >> .config
-          
-          # 文件系统权限相关
-          echo "CONFIG_EXT4_FS=y" >> .config
-          echo "CONFIG_EXT4_FS_POSIX_ACL=y" >> .config
-          echo "CONFIG_EXT4_FS_SECURITY=y" >> .config
-          
-          # SELinux 支持
-          echo "CONFIG_SECURITY_SELINUX=y" >> .config
-          echo "CONFIG_SECURITY_SELINUX_DEVELOP=y" >> .config
-          
-          # SUSFS 配置选项
-          echo "CONFIG_KSU_SUSFS=y" >> .config
-          echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> .config
-          echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> .config
-          echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> .config
-          echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y" >> .config
-          echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y" >> .config
-          echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> .config
-          echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y" >> .config
-          echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" >> .config
-          echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y" >> .config
-          echo "CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y" >> .config
-          echo "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y" >> .config
-          echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> .config
-          
-          echo "✅ 内核配置完成"
+          cat > wild_gki.fragment << 'EOF'
+CONFIG_KSU=y
+CONFIG_KSU_MANUAL_HOOK=y
+CONFIG_OVERLAY_FS=y
+CONFIG_OVERLAY_FS_REDIRECT_DIR=y
+CONFIG_OVERLAY_FS_INDEX=y
+CONFIG_OVERLAY_FS_XATTR=y
+CONFIG_OVERLAY_FS_METACOPY=y
+CONFIG_EXT4_FS=y
+CONFIG_EXT4_FS_POSIX_ACL=y
+CONFIG_EXT4_FS_SECURITY=y
+CONFIG_SECURITY_SELINUX=y
+CONFIG_SECURITY_SELINUX_DEVELOP=y
+CONFIG_KSU_SUSFS=y
+CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
+CONFIG_KSU_SUSFS_SUS_PATH=y
+CONFIG_KSU_SUSFS_SUS_MOUNT=y
+CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
+CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
+CONFIG_KSU_SUSFS_SUS_KSTAT=y
+CONFIG_KSU_SUSFS_TRY_UMOUNT=y
+CONFIG_KSU_SUSFS_SPOOF_UNAME=y
+CONFIG_KSU_SUSFS_ENABLE_LOG=y
+CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
+CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
+CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
+EOF
 
-      - name: Build Kernel (Find Image)
-        run: |
-          cd kernel-source/common
-          echo "🔥 开始编译内核..."
-          
-          # 编译内核，忽略退出码
-          make ARCH=arm64 CC=clang LD=ld.lld LLVM=1 LLVM_IAS=1 -j$(nproc) Image || true
-          
-          # 查找 Image 文件
-          echo "🔍 正在查找 Image 文件..."
-          find . -name "Image" -type f 2>/dev/null | head -20
-          
-          # 尝试常见位置
-          if [ -f arch/arm64/boot/Image ]; then
-            echo "✅ 在 arch/arm64/boot/Image 找到"
-            ls -lh arch/arm64/boot/Image
-            exit 0
-          elif [ -f arch/arm64/boot/Image.gz ]; then
-            echo "✅ 找到 Image.gz，正在解压..."
-            gunzip -c arch/arm64/boot/Image.gz > arch/arm64/boot/Image
-            ls -lh arch/arm64/boot/Image
-            exit 0
-          else
-            echo "❌ 未找到 Image 文件"
-            exit 1
-          fi
-
-      - name: Create AnyKernel3 Package
-        run: |
-          git clone --depth=1 https://github.com/osm0sis/AnyKernel3
-          cp kernel-source/common/arch/arm64/boot/Image AnyKernel3/
-          cd AnyKernel3
-          sed -i 's/do\./title=ReSukiSU Kernel\n/g' anykernel.sh
-          zip -r9 ../ReSukiSU-GKI-${{ github.event.inputs.KERNEL_BRANCH }}.zip * -x .git README.md
-          cd ..
-
-      - name: Upload Kernel Package
+      - name: Upload kernel source as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ReSukiSU-Kernel-${{ github.event.inputs.KERNEL_BRANCH }}
-          path: ReSukiSU-GKI-*.zip
+          name: kernel-source-${{ github.run_id }}
+          path: kernel-source/
+          compression-level: 9
