@@ -19,7 +19,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install -y git repo curl wget make gcc flex bison libncurses-dev libssl-dev python3
+          sudo apt install -y git repo curl wget make gcc flex bison libncurses-dev libssl-dev python3 libelf-dev
 
       - name: Clone AOSP GKI Kernel Source
         run: |
