@@ -29,14 +29,11 @@ jobs:
         run: |
           cd Xiaomi_Kernel_OpenSource
           mkdir -p drivers/misc/hwid
-          # 注意：下面这行必须顶格写，不能有缩进
-          cat > drivers/misc/hwid/Kconfig << 'EOF'
-config HWID
-    bool "HWID support"
-    default y
-    help
-      Hardware ID support for Xiaomi devices
-EOF
+          echo 'config HWID' > drivers/misc/hwid/Kconfig
+          echo '    bool "HWID support"' >> drivers/misc/hwid/Kconfig
+          echo '    default y' >> drivers/misc/hwid/Kconfig
+          echo '    help' >> drivers/misc/hwid/Kconfig
+          echo '      Hardware ID support for Xiaomi devices' >> drivers/misc/hwid/Kconfig
           
       - name: Configure kernel
         run: |
