@@ -30,7 +30,7 @@ jobs:
           git clone --depth=1 https://github.com/MiCode/kernel_devicetree.git -b ${{ github.event.inputs.KERNEL_BRANCH }}
           cp -r kernel_devicetree/* Xiaomi_Kernel_OpenSource/ 2>/dev/null || true
           
-      - name: Configure kernel
+      - name: Find and configure kernel
         run: |
           cd Xiaomi_Kernel_OpenSource
           export ARCH=arm64
@@ -38,10 +38,21 @@ jobs:
           export CC=clang
           export LD=ld.lld
           
-          # 小米13是GKI设备，直接用gki_defconfig
-          make gki_defconfig
-          # 加个本地版本标识
-          echo "CONFIG_LOCALVERSION=\"-fuxi\"" >> .config
+          echo "Looking for defconfig files..."
+          find arch/arm64/configs -name "*defconfig*" | sort
+          
+          # 尝试所有可能的配置文件
+          CONFIG_FILES=$(find arch/arm64/configs -name "*defconfig*")
+          if [ -n "$CONFIG_FILES" ]; then
+            # 使用第一个找到的配置文件
+            FIRST_CONFIG=$(echo "$CONFIG_FILES" | head -1)
+            CONFIG_NAME=$(basename "$FIRST_CONFIG")
+            echo "Using config: $CONFIG_NAME"
+            make "$CONFIG_NAME"
+          else
+            echo "No defconfig found!"
+            exit 1
+          fi
           
       - name: Build kernel
         run: |
@@ -60,10 +71,3 @@ jobs:
         with:
           name: xiaomi13-kernel-${{ github.run_id }}
           path: Xiaomi_Kernel_OpenSource/arch/arm64/boot/Image
-          
-      - name: Upload dtb if exists
-        uses: actions/upload-artifact@v4
-        with:
-          name: xiaomi13-dtb-${{ github.run_id }}
-          path: Xiaomi_Kernel_OpenSource/arch/arm64/boot/dts/
-          if-no-files-found: ignore
