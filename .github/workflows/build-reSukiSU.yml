@@ -8,9 +8,9 @@ on:
         required: true
         default: 'android13-5.15'
       SUSFS_VERSION:
-        description: 'SUSFS 版本 (留空则不集成)'
+        description: 'SUSFS 版本 (留空则不集成，可用版本: 1.5.5, 1.5.4, main)'
         required: false
-        default: 'v1.5.5'
+        default: ''
 
 jobs:
   build:
@@ -44,10 +44,20 @@ jobs:
         run: |
           cd kernel-source/common
           echo "🔥 集成 SUSFS ${{ github.event.inputs.SUSFS_VERSION }} ..."
-          git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b ${{ github.event.inputs.SUSFS_VERSION }}
-          cd susfs4ksu/kernel_patches
-          # 这里假设你的内核版本是 5.15，susfs4ksu 里会有对应的补丁脚本
-          ./apply_susfs_for_kernel.sh ../../../common || echo "SUSFS 补丁可能需手动调整，但继续编译"
+          # 先 clone 完整仓库
+          git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git
+          cd susfs4ksu
+          # 切换到指定 tag
+          git fetch --depth=1 origin tag ${{ github.event.inputs.SUSFS_VERSION }}
+          git checkout ${{ github.event.inputs.SUSFS_VERSION }}
+          cd kernel_patches
+          # 应用补丁（5.15 内核用对应的补丁脚本）
+          if [ -f "apply_susfs_for_kernel.sh" ]; then
+            ./apply_susfs_for_kernel.sh ../../../common
+          else
+            echo "警告: 未找到 apply_susfs_for_kernel.sh，尝试手动复制补丁"
+            cp -r ./* ../../../common/ || true
+          fi
           cd ../../../
           echo "✅ SUSFS 集成完成"
 
@@ -55,7 +65,7 @@ jobs:
         run: |
           mkdir toolchain
           cd toolchain
-          # 下载 AOSP 官方 Clang 工具链（和 Google 编译 GKI 用的版本一致）
+          # 下载 AOSP 官方 Clang 工具链
           wget https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r450784e.tar.gz
           tar -xzf clang-r450784e.tar.gz
           echo "$(pwd)/bin" >> $GITHUB_PATH
@@ -65,7 +75,7 @@ jobs:
           cd kernel-source/common
           # 使用 GKI 默认配置
           make ARCH=arm64 CC=clang LD=ld.lld gki_defconfig
-          # 确保 ReSukiSU 选项已开启（脚本应该已经改了，但再确认一下）
+          # 确保 ReSukiSU 选项已开启
           echo "CONFIG_KSU=y" >> .config
           echo "CONFIG_KSU_MANUAL_HOOK=y" >> .config
 
