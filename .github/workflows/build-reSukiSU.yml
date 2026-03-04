@@ -14,23 +14,8 @@ jobs:
             libncurses-dev libssl-dev python3 libelf-dev bc cpio \
             kmod liblz4-tool libzstd-dev zlib1g-dev \
             gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
-            lld llvm clang cmake \
-            libdw-dev libelf-dev
-          
-          # 编译安装最新版 pahole
-          git clone https://git.kernel.org/pub/scm/devel/pahole/pahole.git
-          cd pahole
-          mkdir build && cd build
-          cmake -D__LIB=lib ..
-          make
-          sudo make install
-          cd ../..
-          
-          # 更新动态库缓存
-          sudo ldconfig
-          
-          # 验证
-          pahole --version
+            lld llvm clang \
+            dwarves  # 就用这个，别自己编译
       
       - name: Clone Xiaomi 13 kernel source
         run: |
