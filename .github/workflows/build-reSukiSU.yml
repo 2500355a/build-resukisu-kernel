@@ -13,8 +13,7 @@ jobs:
           sudo apt install -y git wget curl make gcc flex bison \
             libncurses5-dev libssl-dev python3 libelf-dev bc cpio \
             gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
-            clang lld-14 llvm-14 \
-            dwarves
+            clang lld-14 llvm-14 dwarves
           sudo ln -sf /usr/bin/lld-14 /usr/local/bin/lld
           sudo ln -sf /usr/bin/ld.lld-14 /usr/local/bin/ld.lld
       
@@ -32,6 +31,7 @@ jobs:
           mkdir -p drivers/misc/hwid
           echo 'config HWID' > drivers/misc/hwid/Kconfig
           echo '    bool "HWID support"' >> drivers/misc/hwid/Kconfig
+          echo '    default y' >> drivers/misc/hwid/Kconfig
           
       - name: Configure
         run: |
@@ -45,10 +45,16 @@ jobs:
         run: |
           cd Xiaomi_Kernel_OpenSource
           export ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC=clang LD=ld.lld LLVM=1 LLVM_IAS=1
-          make -j$(nproc) Image
+          make -j$(nproc) Image || true
+          if [ -f arch/arm64/boot/Image ]; then
+            echo "✅ Success: $(ls -lh arch/arm64/boot/Image)"
+          else
+            echo "❌ Failed"
+            exit 1
+          fi
           
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: kernel
+          name: xiaomi13-kernel
           path: Xiaomi_Kernel_OpenSource/arch/arm64/boot/Image
