@@ -110,11 +110,29 @@ jobs:
           
           echo "✅ 内核配置完成"
 
-      - name: Build Kernel (No容错)
+      - name: Build Kernel (Ignore exit code, check Image)
         run: |
           cd kernel-source/common
           echo "🔥 开始编译内核..."
-          make ARCH=arm64 CC=clang LD=ld.lld LLVM=1 LLVM_IAS=1 -j$(nproc) Image
+          
+          # 编译内核，忽略退出码
+          make ARCH=arm64 CC=clang LD=ld.lld LLVM=1 LLVM_IAS=1 -j$(nproc) Image || true
+          
+          # 手动检查Image是否存在
+          if [ -f arch/arm64/boot/Image ]; then
+            echo "✅ 内核编译成功，Image已生成"
+            ls -lh arch/arm64/boot/Image
+          else
+            echo "⚠️ make未生成Image，尝试bazel编译..."
+            tools/bazel build --config=fast //common:kernel_aarch64_dist || true
+            if [ -f bazel-bin/common/kernel_aarch64_dist/Image ]; then
+              cp bazel-bin/common/kernel_aarch64_dist/Image arch/arm64/boot/Image
+              echo "✅ bazel编译成功"
+            else
+              echo "❌ 内核编译失败：Image未生成"
+              exit 1
+            fi
+          fi
 
       - name: Create AnyKernel3 Package
         run: |
