@@ -20,7 +20,7 @@ jobs:
         run: |
           git clone --depth=1 https://github.com/MiCode/Xiaomi_Kernel_OpenSource.git -b fuxi-t-oss
           
-      - name: Apply ReSukiSU (optional)
+      - name: Apply ReSukiSU
         run: |
           cd Xiaomi_Kernel_OpenSource
           curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash
@@ -28,8 +28,8 @@ jobs:
       - name: Fix missing Kconfig
         run: |
           cd Xiaomi_Kernel_OpenSource
-          # 创建缺失的hwid目录和Kconfig
           mkdir -p drivers/misc/hwid
+          # 注意：下面这行必须顶格写，不能有缩进
           cat > drivers/misc/hwid/Kconfig << 'EOF'
 config HWID
     bool "HWID support"
@@ -45,7 +45,6 @@ EOF
           export CROSS_COMPILE=aarch64-linux-gnu-
           export CC=clang
           export LD=ld.lld
-          
           make vendor/fuxi_defconfig
           
       - name: Build kernel
@@ -57,7 +56,6 @@ EOF
           export LD=ld.lld
           export LLVM=1
           export LLVM_IAS=1
-          
           make -j$(nproc) Image
           
       - name: Upload kernel
