@@ -25,6 +25,19 @@ jobs:
           cd Xiaomi_Kernel_OpenSource
           curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash
           
+      - name: Fix missing Kconfig
+        run: |
+          cd Xiaomi_Kernel_OpenSource
+          # 创建缺失的hwid目录和Kconfig
+          mkdir -p drivers/misc/hwid
+          cat > drivers/misc/hwid/Kconfig << 'EOF'
+config HWID
+    bool "HWID support"
+    default y
+    help
+      Hardware ID support for Xiaomi devices
+EOF
+          
       - name: Configure kernel
         run: |
           cd Xiaomi_Kernel_OpenSource
@@ -33,7 +46,6 @@ jobs:
           export CC=clang
           export LD=ld.lld
           
-          # 小米13的配置
           make vendor/fuxi_defconfig
           
       - name: Build kernel
