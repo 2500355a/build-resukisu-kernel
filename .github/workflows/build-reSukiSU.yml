@@ -8,10 +8,15 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Install deps
-        run: sudo apt install -y git wget curl make gcc flex bison \
-          libncurses-dev libssl-dev python3 libelf-dev bc cpio \
-          gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
-          lld llvm clang dwarves
+        run: |
+          sudo apt update
+          sudo apt install -y git wget curl make gcc flex bison \
+            libncurses5-dev libssl-dev python3 libelf-dev bc cpio \
+            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
+            clang lld-14 llvm-14 \
+            dwarves
+          sudo ln -sf /usr/bin/lld-14 /usr/local/bin/lld
+          sudo ln -sf /usr/bin/ld.lld-14 /usr/local/bin/ld.lld
       
       - name: Clone kernel
         run: git clone --depth=1 https://github.com/MiCode/Xiaomi_Kernel_OpenSource.git -b fuxi-t-oss
