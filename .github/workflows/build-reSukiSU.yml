@@ -66,13 +66,18 @@ jobs:
           cd ../..
           echo "✅ WildKernels SUSFS 补丁应用完成"
 
-      - name: Setup Clang Toolchain
+      - name: Setup Clang Toolchain (Fixed)
         run: |
           mkdir toolchain
           cd toolchain
-          wget https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r450784e.tar.gz
-          tar -xzf clang-r450784e.tar.gz
+          
+          # 改用 kernel.org 的预编译 Clang（稳定可靠）
+          wget https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.6/clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04.tar.xz
+          tar -xf clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04.tar.xz
+          mv clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04/* .
+          
           echo "$(pwd)/bin" >> $GITHUB_PATH
+          echo "✅ Clang 17.0.6 安装完成"
 
       - name: Configure Kernel 🔥
         run: |
