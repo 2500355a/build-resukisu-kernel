@@ -38,16 +38,10 @@ jobs:
           export CC=clang
           export LD=ld.lld
           
-          # 找到小米13的配置文件
-          if [ -f arch/arm64/configs/fuxi_defconfig ]; then
-            make fuxi_defconfig
-          elif [ -f arch/arm64/configs/vendor/fuxi_defconfig ]; then
-            make vendor/fuxi_defconfig
-          else
-            echo "No fuxi defconfig found"
-            ls -la arch/arm64/configs/
-            exit 1
-          fi
+          # 小米13是GKI设备，直接用gki_defconfig
+          make gki_defconfig
+          # 加个本地版本标识
+          echo "CONFIG_LOCALVERSION=\"-fuxi\"" >> .config
           
       - name: Build kernel
         run: |
